@@ -1,0 +1,15 @@
+{
+  "name": "motiongrid-backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/node": "latest",
+    "resend": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vercel": "^46.0.5"
+  }
+}
