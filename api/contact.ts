@@ -4,11 +4,13 @@ import { z } from "zod";
 
 const schema = z.object({
   name: z.string().min(2).max(100),
-  email: z.string().email(),
+  email: z.email(),
   phone: z.string().optional(),
   company: z.string().optional(),
   // Honeypot – keep hidden on the UI
   website: z.string().optional(),
+  interests: z.array(z.string()).optional(),
+  budget: z.string().optional(),
 });
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
@@ -17,9 +19,7 @@ const TO = process.env.CONTACT_TO!; // e.g. 'leads@yourdomain.com'
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN; // e.g. 'https://yourdomain.com'
 
 function cors(req: VercelRequest, res: VercelResponse) {
-  const list = (process.env.ALLOWED_ORIGIN ?? "*")
-    .split(",")
-    .map((s) => s.trim());
+  const list = (ALLOWED_ORIGIN ?? "*").split(",").map((s) => s.trim());
 
   const origin = (req.headers.origin as string) || "";
   const allow = list.includes("*")
@@ -55,19 +55,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const parsed = schema.safeParse(req.body);
+    const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res
         .status(400)
         .json({ error: "Invalid input", details: parsed.error.flatten() });
     }
 
-    const { name, email, phone, company, website } = parsed.data;
+    const { name, email, phone, company, website, interests, budget } =
+      parsed.data;
 
     // Honeypot: if present, pretend success
-    if (website) return res.status(200).json({ ok: true });
+    if (website)
+      return res
+        .status(200)
+        .json({ ok: true, ignored: true, reason: "honeypot" });
 
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: FROM,
       to: TO.split(",").map((s) => s.trim()),
       replyTo: email,
@@ -78,10 +82,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         <p><strong>Email:</strong> ${escapeHtml(email)}</p>
         ${phone ? `<p><strong>Phone:</strong> ${escapeHtml(phone)}</p>` : ""}
         ${company ? `<p><strong>Company:</strong> ${escapeHtml(company)}</p>` : ""}
+        ${interests?.length ? `<p><strong>Interests:</strong> ${interests.map(escapeHtml).join(", ")}</p>` : ""}
+        ${budget ? `<p><strong>Budget:</strong> ${escapeHtml(budget)}</p>` : ""}
       `,
     });
 
-    return res.status(200).json({ ok: true });
+    if (error) {
+      return res.status(502).json({ error: "Resend Failed", details: error });
+    }
+
+    return res.status(200).json({ ok: true, id: data?.id });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Failed to send email" });
