@@ -16,12 +16,20 @@ const FROM = process.env.CONTACT_FROM!; // e.g. 'Contact Form <hello@yourdomain.
 const TO = process.env.CONTACT_TO!; // e.g. 'leads@yourdomain.com'
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN; // e.g. 'https://yourdomain.com'
 
-function cors(res: VercelResponse) {
-  if (ALLOWED_ORIGIN) {
-    res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
-  } else {
-    res.setHeader("Access-Control-Allow-Origin", "*"); // tighten in prod
-  }
+function cors(req: VercelRequest, res: VercelResponse) {
+  const list = (process.env.ALLOWED_ORIGIN ?? "*")
+    .split(",")
+    .map((s) => s.trim());
+
+  const origin = (req.headers.origin as string) || "";
+  const allow = list.includes("*")
+    ? "*"
+    : list.includes(origin)
+      ? origin
+      : list[0] || "";
+
+  if (allow) res.setHeader("Access-Control-Allow-Origin", allow);
+  res.setHeader("Vary", "Origin"); // caching correctness
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
@@ -41,7 +49,7 @@ function escapeHtml(str: string) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  cors(res);
+  cors(req, res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
